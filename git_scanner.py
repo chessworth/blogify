@@ -4,6 +4,7 @@ from pathlib import Path
 import openai
 from openai import OpenAI
 import argparse
+import git
 
 openai.api_key = os.environ.get('OPENAI_API_KEY')  # Set your OpenAI API key
 
@@ -70,7 +71,7 @@ def analyze_commits_with_ai(all_commits, free=False):
     except Exception as e:
         return f"Error analyzing commits: {str(e)}"
 
-def scan_directory(directory='.'):
+def scan_directory(directory='.', free=False, current=False):
     """Scan a directory for git repositories and get their commit logs."""
     directory = os.path.abspath(directory)
     print(f"Scanning {directory} for Git repositories...\n")
@@ -96,8 +97,21 @@ def scan_directory(directory='.'):
             print(commit_log)
             print("-" * 50)
             print("\n")
-            
-            all_commits += f"\nRepository: {repo_path.name}\n{detailed_log}\n\n"
+
+            if current:
+                # Get the current changes
+                repo = git.Repo(repo_path)
+                changed_files = [item.a_path for item in repo.index.diff(None)] #Files not staged
+                changed_files.extend([item.a_path for item in repo.index.diff('HEAD')]) #Files staged
+                file_contents = {}
+                for file_path in changed_files:
+                    with open(os.path.join(repo_path, file_path), 'r') as file:
+                        file_contents[file_path] = file.read()
+                for file_path, content in file_contents.items():
+                    # Process the content of each file
+                    all_commits += (f"File: {file_path}\nContent:\n{content}\n{'='*20}")
+            else:
+                all_commits += f"Repository: {repo_path.name}\n{detailed_log}\n\n"
     
     if found_repos == 0:
         print("No Git repositories found in the specified directory.")
@@ -105,12 +119,9 @@ def scan_directory(directory='.'):
         print(f"Found {found_repos} Git repositories.")
         
         if all_commits:
-            parser = argparse.ArgumentParser()
-            parser.add_argument('--free', action='store_true')
-            args = parser.parse_args()
             
-            analysis = analyze_commits_with_ai(all_commits, free=args.free)
-            if args.free:
+            analysis = analyze_commits_with_ai(all_commits, free)
+            if free:
                 print(analysis)
             else:
                 print("\nAI Analysis:")
@@ -121,10 +132,11 @@ def scan_directory(directory='.'):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('directory', nargs='?', default='.', help='directory to scan for Git repositories')
-    parser.add_argument('--free', action='store_true', help='output the prompt instead of sending it to OpenAI')
+    parser.add_argument('-f', '--free', action='store_true', help='output the prompt instead of sending it to OpenAI')
+    parser.add_argument('-c', '--current', action='store_true', help='scan the current changes (use before you commit)')
     args = parser.parse_args()
 
-    scan_directory(args.directory)
+    scan_directory(args.directory, free=args.free, current=args.current)
 
 if __name__ == "__main__":
     main()   
