@@ -20,9 +20,15 @@ def get_commit_log(repo_path, days=1):
             ['git', '-C', repo_path, 'log', f'--since="{days} days ago"', '--pretty=format:%h - %an, %ar : %s'],
             capture_output=True, text=True, check=True
         )
-        return result.stdout
+        #calculate number of commits
+        num_commits = len(result.stdout.splitlines())
+        #return an object with the number of commits and the commit log
+        return {"num_commits": num_commits, "commit_log": result.stdout}
     except subprocess.CalledProcessError:
         return "Failed to retrieve commit log"
+
+def get_detailed_commit_log(repo_path, count=10):
+    import git
 
 def get_detailed_commit_log(repo_path, count=10):
     try:
@@ -31,23 +37,58 @@ def get_detailed_commit_log(repo_path, count=10):
         detailed_commits = []
 
         for commit in commits:
-            commit_info = f"Commit: {commit.hexsha}\nAuthor: {commit.author.name} <{commit.author.email}>\nDate: {commit.committed_datetime}\n\nMessage: {commit.message.strip()}\n"
+            commit_info = (
+                f"Commit: {commit.hexsha}\n"
+                f"Author: {commit.author.name} <{commit.author.email}>\n"
+                f"Date: {commit.committed_datetime}\n\n"
+                f"Message: {commit.message.strip()}\n"
+            )
 
             if commit.parents:
-                diffs = commit.diff(commit.parents[0])
+                diffs = commit.diff(commit.parents[0], create_patch=True)
             else:
-                # Initial commit: diff against empty tree
                 empty_tree = repo.tree('4b825dc642cb6eb9a060e54bf8d69288fbee4904')
-                diffs = commit.diff(empty_tree)
+                diffs = commit.diff(empty_tree, create_patch=True)
 
-            files_changed = "\n".join(f"- {diff.a_path or diff.b_path}" for diff in diffs)
-            commit_info += f"Files changed:\n{files_changed}\n{'=' * 40}\n"
+            file_changes = []
+            for diff in diffs:
+                change_type = (
+                    "Added" if diff.new_file else
+                    "Deleted" if diff.deleted_file else
+                    "Modified"
+                )
+                filename = diff.b_path or diff.a_path or "Unknown file"
+                patch = diff.diff.decode(errors='ignore')
+
+                added_lines = []
+                removed_lines = []
+
+                for line in patch.splitlines():
+                    if line.startswith('+++') or line.startswith('---') or line.startswith('@@'):
+                        continue
+                    if line.startswith('+'):
+                        added_lines.append(line)
+                    elif line.startswith('-'):
+                        removed_lines.append(line)
+
+                file_block = f"- {filename} ({change_type})"
+                if added_lines:
+                    file_block += f"\n  ADDED lines:\n    " + "\n    ".join(added_lines)
+                if removed_lines:
+                    file_block += f"\n  REMOVED lines:\n    " + "\n    ".join(removed_lines)
+                if not (added_lines or removed_lines):
+                    file_block += "\n  (No content changes)"
+
+                file_changes.append(file_block)
+
+            commit_info += f"\nFiles changed:\n" + "\n".join(file_changes)
+            commit_info += "\n" + "=" * 60 + "\n"
             detailed_commits.append(commit_info)
 
         return "\n".join(detailed_commits)
     except Exception as e:
         return f"Failed to retrieve detailed commit log: {str(e)}"
-
+    
 def analyze_commits_with_ai(all_commits, free=False):
     """Analyze commits using OpenAI to identify new technologies."""
     client = OpenAI()  # Uses OPENAI_API_KEY from environment variables
@@ -69,7 +110,7 @@ def analyze_commits_with_ai(all_commits, free=False):
     except Exception as e:
         return f"Error analyzing commits: {str(e)}"
 
-def scan_directory(directory='.', free=False, current=False):
+def scan_directory(directory='.', days=1, free=False, current=False):
     """Scan a directory for git repositories and get their commit logs."""
     directory = os.path.abspath(directory)
     print(f"Scanning {directory} for Git repositories...\n")
@@ -85,14 +126,14 @@ def scan_directory(directory='.', free=False, current=False):
         if is_git_repo(root):
             found_repos += 1
             repo_path = Path(root)
-            commit_log = get_commit_log(root)
-            detailed_log = get_detailed_commit_log(root, 5)  # Get details for 5 most recent commits
+            commit_log = get_commit_log(root, days)
+            detailed_log = get_detailed_commit_log(root, commit_log.get("num_commits", 5))  # Get details for 5 most recent commits
             
             print(f"Repository found: {repo_path.name}")
             print(f"Location: {repo_path}")
             print("\nCommit Log:")
             print("-" * 50)
-            print(commit_log)
+            print(commit_log.get("commit_log", "Failed to retrieve commit log"))    
             print("-" * 50)
             print("\n")
 
@@ -130,11 +171,12 @@ def scan_directory(directory='.', free=False, current=False):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('directory', nargs='?', default='.', help='directory to scan for Git repositories')
+    parser.add_argument('days', nargs='?', default=1, type=int, help='number of days to scan for commits')
     parser.add_argument('-f', '--free', action='store_true', help='output the prompt instead of sending it to OpenAI')
     parser.add_argument('-c', '--current', action='store_true', help='scan the current changes (use before you commit)')
     args = parser.parse_args()
 
-    scan_directory(args.directory, free=args.free, current=args.current)
+    scan_directory(args.directory, args.days, free=args.free, current=args.current)
 
 if __name__ == "__main__":
     main()   
