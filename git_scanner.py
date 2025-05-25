@@ -25,29 +25,27 @@ def get_commit_log(repo_path, days=1):
         return "Failed to retrieve commit log"
 
 def get_detailed_commit_log(repo_path, count=10):
-    """Get detailed commit information for the specified number of commits."""
     try:
-        # Get commit hashes first
-        hash_result = subprocess.run(
-            ['git', '-C', repo_path, 'log', f'-{count}', '--pretty=format:%H'],
-            capture_output=True, text=True, check=True
-        )
-        commit_hashes = hash_result.stdout.strip().split('\n')
-        
+        repo = git.Repo(repo_path)
+        commits = list(repo.iter_commits('HEAD', max_count=count))
         detailed_commits = []
-        for commit_hash in commit_hashes:
-            if not commit_hash:  # Skip empty lines
-                continue
-                
-            # Get full commit details
-            detail_result = subprocess.run(
-                ['git', '-C', repo_path, 'show', commit_hash, '--name-status'],
-                capture_output=True, text=True, check=True
-            )
-            detailed_commits.append(detail_result.stdout)
-            
-        return '\n'.join(detailed_commits)
-    except subprocess.CalledProcessError as e:
+
+        for commit in commits:
+            commit_info = f"Commit: {commit.hexsha}\nAuthor: {commit.author.name} <{commit.author.email}>\nDate: {commit.committed_datetime}\n\nMessage: {commit.message.strip()}\n"
+
+            if commit.parents:
+                diffs = commit.diff(commit.parents[0])
+            else:
+                # Initial commit: diff against empty tree
+                empty_tree = repo.tree('4b825dc642cb6eb9a060e54bf8d69288fbee4904')
+                diffs = commit.diff(empty_tree)
+
+            files_changed = "\n".join(f"- {diff.a_path or diff.b_path}" for diff in diffs)
+            commit_info += f"Files changed:\n{files_changed}\n{'=' * 40}\n"
+            detailed_commits.append(commit_info)
+
+        return "\n".join(detailed_commits)
+    except Exception as e:
         return f"Failed to retrieve detailed commit log: {str(e)}"
 
 def analyze_commits_with_ai(all_commits, free=False):
