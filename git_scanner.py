@@ -23,6 +23,32 @@ def get_commit_log(repo_path, days=1):
     except subprocess.CalledProcessError:
         return "Failed to retrieve commit log"
 
+def get_detailed_commit_log(repo_path, count=10):
+    """Get detailed commit information for the specified number of commits."""
+    try:
+        # Get commit hashes first
+        hash_result = subprocess.run(
+            ['git', '-C', repo_path, 'log', f'-{count}', '--pretty=format:%H'],
+            capture_output=True, text=True, check=True
+        )
+        commit_hashes = hash_result.stdout.strip().split('\n')
+        
+        detailed_commits = []
+        for commit_hash in commit_hashes:
+            if not commit_hash:  # Skip empty lines
+                continue
+                
+            # Get full commit details
+            detail_result = subprocess.run(
+                ['git', '-C', repo_path, 'show', commit_hash, '--name-status'],
+                capture_output=True, text=True, check=True
+            )
+            detailed_commits.append(detail_result.stdout)
+            
+        return '\n'.join(detailed_commits)
+    except subprocess.CalledProcessError as e:
+        return f"Failed to retrieve detailed commit log: {str(e)}"
+
 def analyze_commits_with_ai(all_commits):
     """Analyze commits using OpenAI to identify new technologies."""
     client = OpenAI()  # Uses OPENAI_API_KEY from environment variables
@@ -56,6 +82,7 @@ def scan_directory(directory='.'):
             found_repos += 1
             repo_path = Path(root)
             commit_log = get_commit_log(root)
+            detailed_log = get_detailed_commit_log(root, 5)  # Get details for 5 most recent commits
             
             print(f"Repository found: {repo_path.name}")
             print(f"Location: {repo_path}")
@@ -65,7 +92,7 @@ def scan_directory(directory='.'):
             print("-" * 50)
             print("\n")
             
-            all_commits += f"\nRepository: {repo_path.name}\n{commit_log}\n\n"
+            all_commits += f"\nRepository: {repo_path.name}\n{detailed_log}\n\n"
     
     if found_repos == 0:
         print("No Git repositories found in the specified directory.")
@@ -87,4 +114,5 @@ if __name__ == "__main__":
         scan_directory(sys.argv[1])
     else:
         scan_directory()
+
 
