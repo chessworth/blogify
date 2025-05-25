@@ -5,6 +5,7 @@ import openai
 from openai import OpenAI
 import argparse
 import git
+import re
 
 openai.api_key = os.environ.get('OPENAI_API_KEY')  # Set your OpenAI API key
 
@@ -66,10 +67,11 @@ def get_detailed_commit_log(repo_path, count=10):
                 for line in patch.splitlines():
                     if line.startswith('+++') or line.startswith('---') or line.startswith('@@'):
                         continue
-                    if line.startswith('+'):
-                        added_lines.append(line)
-                    elif line.startswith('-'):
-                        removed_lines.append(line)
+                    clean_line = remove_emojis(line)
+                    if clean_line.startswith('+'):
+                        added_lines.append(clean_line)
+                    elif clean_line.startswith('-'):
+                        removed_lines.append(clean_line)
 
                 file_block = f"- {filename} ({change_type})"
                 if added_lines:
@@ -167,6 +169,22 @@ def scan_directory(directory='.', days=1, free=False, current=False):
                 print("=" * 80)
                 print(analysis)
                 print("=" * 80)
+
+def remove_emojis(text):
+    emoji_pattern = re.compile(
+        "[" 
+        "\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F300-\U0001F5FF"  # symbols & pictographs
+        "\U0001F680-\U0001F6FF"  # transport & map
+        "\U0001F1E0-\U0001F1FF"  # flags
+        "\U00002700-\U000027BF"  # Dingbats
+        "\U0001F900-\U0001F9FF"  # supplemental symbols
+        "\U0001FA70-\U0001FAFF"  # Extended-A
+        "\u200d"                 # zero-width joiner
+        "\ufe0f"                 # variation selector-16
+        "]+", flags=re.UNICODE
+    )
+    return emoji_pattern.sub('', text)
 
 def main():
     parser = argparse.ArgumentParser()
