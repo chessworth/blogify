@@ -1,9 +1,9 @@
-#!/usr/bin/env python3
 import os
 import subprocess
 from pathlib import Path
 import openai
 from openai import OpenAI
+import argparse
 
 openai.api_key = os.environ.get('OPENAI_API_KEY')  # Set your OpenAI API key
 
@@ -49,16 +49,21 @@ def get_detailed_commit_log(repo_path, count=10):
     except subprocess.CalledProcessError as e:
         return f"Failed to retrieve detailed commit log: {str(e)}"
 
-def analyze_commits_with_ai(all_commits):
+def analyze_commits_with_ai(all_commits, free=False):
     """Analyze commits using OpenAI to identify new technologies."""
     client = OpenAI()  # Uses OPENAI_API_KEY from environment variables
+    
+    prompt = f"Find any new or unique technologies used in the following commits and summarize them in a blog post:\n\n{all_commits}"
+    
+    if free:
+        return prompt
     
     try:
         completion = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a technology analyst who specializes in identifying new technologies from commit logs."},
-                {"role": "user", "content": f"Find any new or unique technologies used in the following commits and summarize them in a blog post:\n\n{all_commits}"}
+                {"role": "user", "content": prompt}
             ]
         )
         return completion.choices[0].message.content
@@ -100,19 +105,26 @@ def scan_directory(directory='.'):
         print(f"Found {found_repos} Git repositories.")
         
         if all_commits:
-            print("\nAnalyzing commits with AI...\n")
-            analysis = analyze_commits_with_ai(all_commits)
-            print("\nAI Analysis:")
-            print("=" * 80)
-            print(analysis)
-            print("=" * 80)
+            parser = argparse.ArgumentParser()
+            parser.add_argument('--free', action='store_true')
+            args = parser.parse_args()
+            
+            analysis = analyze_commits_with_ai(all_commits, free=args.free)
+            if args.free:
+                print(analysis)
+            else:
+                print("\nAI Analysis:")
+                print("=" * 80)
+                print(analysis)
+                print("=" * 80)
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('directory', nargs='?', default='.', help='directory to scan for Git repositories')
+    parser.add_argument('--free', action='store_true', help='output the prompt instead of sending it to OpenAI')
+    args = parser.parse_args()
+
+    scan_directory(args.directory)
 
 if __name__ == "__main__":
-    import sys
-    
-    if len(sys.argv) > 1:
-        scan_directory(sys.argv[1])
-    else:
-        scan_directory()
-
-
+    main()   
