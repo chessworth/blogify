@@ -65,9 +65,9 @@ def get_detailed_commit_log(repo_path, count=10, stringCommitLog = False):
                     if line.startswith('+++') or line.startswith('---') or line.startswith('@@'):
                         continue
                     clean_line = remove_emojis(line)
-                    if clean_line.startswith('+'):
+                    if clean_line.startswith('-'):
                         added_lines.append(clean_line)
-                    elif clean_line.startswith('-'):
+                    elif clean_line.startswith('+'):
                         removed_lines.append(clean_line)
 
                 file_block = f"- {filename} ({change_type})"
