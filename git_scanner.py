@@ -24,11 +24,11 @@ def get_commit_log(repo_path, days=1):
         #calculate number of commits
         num_commits = len(result.stdout.splitlines())
         #return an object with the number of commits and the commit log
-        return {"num_commits": num_commits, "commit_log": result.stdout}
+        return result.stdout, num_commits
     except subprocess.CalledProcessError:
         return "Failed to retrieve commit log"
 
-def get_detailed_commit_log(repo_path, count=10):
+def get_detailed_commit_log(repo_path, count=10, stringCommitLog = False):
     try:
         repo = git.Repo(repo_path)
         commits = list(repo.iter_commits('HEAD', max_count=count))
@@ -84,7 +84,17 @@ def get_detailed_commit_log(repo_path, count=10):
             commit_info += "\n" + "=" * 60 + "\n"
             detailed_commits.append(commit_info)
 
-        return "\n".join(detailed_commits), commits
+        if not stringCommitLog:
+            return "\n".join(detailed_commits), commits
+        if stringCommitLog:
+            commitStringInfo = ""
+            for commit in commits:
+                commit_info = (
+                    f"Date: {commit.committed_datetime}\n\n"
+                    f"Message: {commit.message.strip()}\n"
+                )
+                commitStringInfo += commit_info
+            return "\n".join(detailed_commits), commitStringInfo
     except Exception as e:
         return f"Failed to retrieve detailed commit log: {str(e)}"
     
@@ -126,16 +136,16 @@ def scan_directory(directory='.', days=1, commits=0, free=False, current=False, 
             found_repos += 1
             repo_path = Path(root)
             if commits == 0:
-                commit_log = get_commit_log(root, days)
-                detailed_log, _ = get_detailed_commit_log(root, commit_log.get("num_commits", 5))
+                commit_log, num_commits = get_commit_log(root, days)
+                detailed_log, _ = get_detailed_commit_log(root, num_commits if num_commits > 0 else 5)
             else:
-                detailed_log, commit_log = get_detailed_commit_log(root, commits)
+                detailed_log, commit_log = get_detailed_commit_log(root, commits, True)
             
             print(f"Repository found: {repo_path.name}")
             print(f"Location: {repo_path}")
             print("\nCommit Log:")
             print("-" * 50)
-            print(commit_log.get("commit_log", "Failed to retrieve commit log"))    
+            print(commit_log)    
             print("-" * 50)
             print("\n")
 
