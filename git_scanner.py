@@ -29,9 +29,6 @@ def get_commit_log(repo_path, days=1):
         return "Failed to retrieve commit log"
 
 def get_detailed_commit_log(repo_path, count=10):
-    import git
-
-def get_detailed_commit_log(repo_path, count=10):
     try:
         repo = git.Repo(repo_path)
         commits = list(repo.iter_commits('HEAD', max_count=count))
@@ -87,7 +84,7 @@ def get_detailed_commit_log(repo_path, count=10):
             commit_info += "\n" + "=" * 60 + "\n"
             detailed_commits.append(commit_info)
 
-        return "\n".join(detailed_commits)
+        return "\n".join(detailed_commits), commits
     except Exception as e:
         return f"Failed to retrieve detailed commit log: {str(e)}"
     
@@ -112,24 +109,27 @@ def analyze_commits_with_ai(all_commits, free=False):
     except Exception as e:
         return f"Error analyzing commits: {str(e)}"
 
-def scan_directory(directory='.', days=1, free=False, current=False):
+def scan_directory(directory='.', days=1, commits=0, free=False, current=False, delve=False):
     """Scan a directory for git repositories and get their commit logs."""
     directory = os.path.abspath(directory)
     print(f"Scanning {directory} for Git repositories...\n")
     
     found_repos = 0
     all_commits = ""
-    
+
     for root, dirs, _ in os.walk(directory):
         # Skip .git directories to avoid recursion issues
         if '.git' in dirs:
             dirs.remove('.git')
             
-        if is_git_repo(root):
+        if is_git_repo(root) and (delve or found_repos == 0):
             found_repos += 1
             repo_path = Path(root)
-            commit_log = get_commit_log(root, days)
-            detailed_log = get_detailed_commit_log(root, commit_log.get("num_commits", 5))  # Get details for 5 most recent commits
+            if commits == 0:
+                commit_log = get_commit_log(root, days)
+                detailed_log, _ = get_detailed_commit_log(root, commit_log.get("num_commits", 5))
+            else:
+                detailed_log, commit_log = get_detailed_commit_log(root, commits)
             
             print(f"Repository found: {repo_path.name}")
             print(f"Location: {repo_path}")
@@ -190,11 +190,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('directory', nargs='?', default='.', help='directory to scan for Git repositories')
     parser.add_argument('days', nargs='?', default=1, type=int, help='number of days to scan for commits')
+    parser.add_argument('commits', nargs='?', default=0, type=int, help='number of commits to scan')
     parser.add_argument('-f', '--free', action='store_true', help='output the prompt instead of sending it to OpenAI')
     parser.add_argument('-c', '--current', action='store_true', help='scan the current changes (use before you commit)')
+    parser.add_argument('-d', '--delve', action='store_true', help='check for multiple repositiories')   
     args = parser.parse_args()
 
-    scan_directory(args.directory, args.days, free=args.free, current=args.current)
+    scan_directory(args.directory, args.days, args.commits, free=args.free, current=args.current, delve=args.delve)
 
 if __name__ == "__main__":
     main()   
